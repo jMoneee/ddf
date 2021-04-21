@@ -52,6 +52,7 @@ import net.opengis.gml.v_3_1_1.DirectPositionType;
 import net.opengis.gml.v_3_1_1.EnvelopeType;
 import net.opengis.gml.v_3_1_1.LineStringType;
 import net.opengis.gml.v_3_1_1.LinearRingType;
+import net.opengis.gml.v_3_1_1.MultiPolygonType;
 import net.opengis.gml.v_3_1_1.PointType;
 import net.opengis.gml.v_3_1_1.PolygonType;
 import org.apache.commons.collections.CollectionUtils;
@@ -66,6 +67,7 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.io.ParseException;
@@ -1191,6 +1193,32 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
     }
   }
 
+   private JAXBElement<MultiPolygonType> createMultiPolygon(String wkt) {
+    MultiPolygonType multiPolygon = new MultiPolygonType();
+    LinearRingType linearRing = new LinearRingType();
+
+    Coordinate[] coordinates = getCoordinatesFromWkt(wkt);
+    if (coordinates != null && coordinates.length > 0) {
+      String coordinateString = coordinateStrategy.toString(coordinates);
+
+      CoordinatesType coordinatesType = new CoordinatesType();
+      coordinatesType.setValue(coordinateString);
+      coordinatesType.setDecimal(".");
+      coordinatesType.setCs(",");
+      coordinatesType.setTs(" ");
+
+      linearRing.setCoordinates(coordinatesType);
+
+      AbstractRingPropertyType abstractRingPropertyType =
+          gmlObjectFactory.createAbstractRingPropertyType();
+      abstractRingPropertyType.setRing(gmlObjectFactory.createLinearRing(linearRing));
+
+      return gmlObjectFactory.createMultiPolygon(multiPolygon);
+    } else {
+      throw new IllegalArgumentException("Unable to parse Polygon coordinates from WKT String");
+    }
+  }
+
   private JAXBElement<AbstractGeometryType> createPoint(String wkt) {
     Coordinate[] coordinates = getCoordinatesFromWkt(wkt);
 
@@ -1333,6 +1361,12 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
         return createLineString(wktGeometry);
       } else {
         throw new IllegalArgumentException("The LineString operand is not supported.");
+      }
+    } else if (wktGeometry instanceof MultiPolygon) {
+      if (isGeometryOperandSupported(Wfs11Constants.MULTI_POLYGON)) {
+        return createMultiPolygon(wkt);
+      } else {
+        throw new IllegalArgumentException("The MultiPolygon operand is not supported.");
       }
     }
     throw new IllegalArgumentException("Unable to create Geometry from WKT String");
