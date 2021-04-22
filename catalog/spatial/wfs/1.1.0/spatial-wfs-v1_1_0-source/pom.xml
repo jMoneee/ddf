@@ -209,6 +209,24 @@
             <artifactId>security-rest-cxfwrapper</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.codice.ddf.spatial</groupId>
+            <artifactId>spatial-csw-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.codice.ddf.spatial</groupId>
+            <artifactId>spatial-csw-source-common</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
     <build>
         <resources>

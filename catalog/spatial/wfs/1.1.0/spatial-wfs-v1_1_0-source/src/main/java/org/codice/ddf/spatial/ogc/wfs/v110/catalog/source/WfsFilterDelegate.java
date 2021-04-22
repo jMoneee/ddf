@@ -15,6 +15,8 @@ package org.codice.ddf.spatial.ogc.wfs.v110.catalog.source;
 
 import ddf.catalog.data.Metacard;
 import ddf.catalog.filter.impl.SimpleFilterDelegate;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -24,8 +26,15 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.Marshaller;
+import javax.xml.bind.Unmarshaller;
 import javax.xml.namespace.QName;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 import net.opengis.filter.v_1_1_0.AbstractIdType;
 import net.opengis.filter.v_1_1_0.BBOXType;
 import net.opengis.filter.v_1_1_0.BinaryComparisonOpType;
@@ -57,12 +66,16 @@ import net.opengis.gml.v_3_1_1.PointType;
 import net.opengis.gml.v_3_1_1.PolygonType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.codice.ddf.spatial.ogc.csw.catalog.common.CswJAXBElementProvider;
+import org.codice.ddf.spatial.ogc.csw.catalog.common.source.CswJTSToGML311GeometryConverter;
 import org.codice.ddf.spatial.ogc.wfs.catalog.common.FeatureMetacardType;
 import org.codice.ddf.spatial.ogc.wfs.catalog.common.WfsConstants;
 import org.codice.ddf.spatial.ogc.wfs.catalog.mapper.MetacardMapper;
 import org.codice.ddf.spatial.ogc.wfs.v110.catalog.common.Wfs11Constants;
 import org.codice.ddf.spatial.ogc.wfs.v110.catalog.common.Wfs11Constants.SPATIAL_OPERATORS;
 import org.joda.time.DateTime;
+import org.jvnet.ogc.gml.v_3_1_1.jts.JTSToGML311GeometryConverter;
+import org.jvnet.ogc.gml.v_3_1_1.jts.MarshallerImpl;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
@@ -117,6 +130,13 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
 
   private final String escapeChar;
 
+  private static final String OGC_CSW_PACKAGE = "net.opengis.cat.csw.v_2_0_2";
+  private static final String OGC_FILTER_PACKAGE = "net.opengis.filter.v_1_1_0";
+  private static final String OGC_GML_PACKAGE = "net.opengis.gml.v_3_1_1";
+  private static final String OGC_OWS_PACKAGE = "net.opengis.gml.v_3_1_1";
+
+  private static final JAXBContext JAXB_CONTEXT = initJaxbContext();
+
   private List<String> supportedGeo;
 
   private List<QName> geometryOperands;
@@ -142,6 +162,28 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
     this.wildcardChar = wildcardChar == null ? WfsConstants.WILD_CARD : wildcardChar.toString();
     this.singleChar = singleChar == null ? SINGLE_CHAR : singleChar.toString();
     this.escapeChar = escapeChar == null ? WfsConstants.ESCAPE : escapeChar.toString();
+  }
+
+  private static JAXBContext initJaxbContext() {
+    JAXBContext jaxbContext = null;
+
+    // JAXB context path
+    // "net.opengis.cat.csw.v_2_0_2:net.opengis.filter.v_1_1_0:net.opengis.gml.v_3_1_1:net.opengis.ows.v_1_0_0"
+    String contextPath =
+        StringUtils.join(
+            new String[] {OGC_CSW_PACKAGE, OGC_FILTER_PACKAGE, OGC_GML_PACKAGE, OGC_OWS_PACKAGE},
+            ":");
+
+    try {
+      LOGGER.debug("Creating JAXB context with context path: {}.", contextPath);
+      jaxbContext =
+          JAXBContext.newInstance(contextPath, CswJAXBElementProvider.class.getClassLoader());
+      LOGGER.debug("{}", jaxbContext);
+    } catch (JAXBException e) {
+      LOGGER.info("Unable to create JAXB context using contextPath: {}.", contextPath, e);
+    }
+
+    return jaxbContext;
   }
 
   public void setSupportedGeometryOperands(List<QName> geometryOperands) {
@@ -1193,27 +1235,48 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
     }
   }
 
-   private JAXBElement<MultiPolygonType> createMultiPolygon(String wkt) {
-    MultiPolygonType multiPolygon = new MultiPolygonType();
-    LinearRingType linearRing = new LinearRingType();
-
+  private JAXBElement<MultiPolygonType> createMultiPolygon(String wkt) {
+    Geometry geometry;
     Coordinate[] coordinates = getCoordinatesFromWkt(wkt);
+
     if (coordinates != null && coordinates.length > 0) {
-      String coordinateString = coordinateStrategy.toString(coordinates);
+      try {
+        geometry = getGeometryFromWkt(wkt);
+      } catch (ParseException e) {
+        throw new IllegalArgumentException("Unable to parse WKT: " + wkt, e);
+      }
+      JAXBElement<MultiPolygonType> multiPoly = null;
+      try {
 
-      CoordinatesType coordinatesType = new CoordinatesType();
-      coordinatesType.setValue(coordinateString);
-      coordinatesType.setDecimal(".");
-      coordinatesType.setCs(",");
-      coordinatesType.setTs(" ");
+        JTSToGML311GeometryConverter converter = new CswJTSToGML311GeometryConverter();
 
-      linearRing.setCoordinates(coordinatesType);
+        Marshaller marshaller = new MarshallerImpl(JAXB_CONTEXT.createMarshaller(), converter);
+        StringWriter writer = new StringWriter();
+        marshaller.marshal(geometry, writer);
+        String xmlGeo = writer.toString();
+        LOGGER.debug("Geometry as XML: {}", xmlGeo);
 
-      AbstractRingPropertyType abstractRingPropertyType =
-          gmlObjectFactory.createAbstractRingPropertyType();
-      abstractRingPropertyType.setRing(gmlObjectFactory.createLinearRing(linearRing));
+        XMLInputFactory xmlInputFactory = XMLInputFactory.newFactory();
+        xmlInputFactory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        xmlInputFactory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        xmlInputFactory.setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false);
+        XMLStreamReader xmlStreamReader =
+            xmlInputFactory.createXMLStreamReader(new StringReader(xmlGeo));
 
-      return gmlObjectFactory.createMultiPolygon(multiPolygon);
+        Unmarshaller unmarshaller = JAXB_CONTEXT.createUnmarshaller();
+        Object object = unmarshaller.unmarshal(xmlStreamReader);
+        LOGGER.debug("Unmarshalled as => {}", object);
+        if (object instanceof JAXBElement) {
+          multiPoly = (JAXBElement<MultiPolygonType>) object;
+        } else {
+          LOGGER.debug(
+              "Unable to cast to JAXBElement<? extends AbstractGeometryType>.  Object is of type [{}].",
+              object.getClass().getName());
+        }
+      } catch (JAXBException | XMLStreamException e) {
+        LOGGER.debug("Unable to unmarshal geometry [{}]", geometry.getClass().getName(), e);
+      }
+      return multiPoly;
     } else {
       throw new IllegalArgumentException("Unable to parse Polygon coordinates from WKT String");
     }
