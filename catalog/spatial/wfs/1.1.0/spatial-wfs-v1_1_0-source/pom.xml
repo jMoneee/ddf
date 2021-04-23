@@ -169,6 +169,11 @@
             <groupId>javax.ws.rs</groupId>
             <artifactId>javax.ws.rs-api</artifactId>
         </dependency>
+                <dependency>
+            <groupId>io.github.soc</groupId>
+            <artifactId>ogc-tools-gml-jts</artifactId>
+            <version>${ogc-tools-gml-jts.version}</version>
+        </dependency>
 
         <!-- Test Dependencies -->
         <dependency>
@@ -241,7 +246,8 @@
                             spatial-wfs-source,
                             spatial-ogc-common,
                             catalog-core-api-impl,
-                            geospatial
+                            geospatial,
+                            ogc-tools-gml-jts
                         </Embed-Dependency>
                         <Private-Package>
                             org.codice.ddf.spatial.ogc.wfs.catalog.mapper.impl
