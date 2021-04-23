@@ -66,8 +66,7 @@ import net.opengis.gml.v_3_1_1.PointType;
 import net.opengis.gml.v_3_1_1.PolygonType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.codice.ddf.spatial.ogc.csw.catalog.common.CswJAXBElementProvider;
-import org.codice.ddf.spatial.ogc.csw.catalog.common.source.CswJTSToGML311GeometryConverter;
+import org.apache.cxf.jaxrs.provider.JAXBElementProvider;
 import org.codice.ddf.spatial.ogc.wfs.catalog.common.FeatureMetacardType;
 import org.codice.ddf.spatial.ogc.wfs.catalog.common.WfsConstants;
 import org.codice.ddf.spatial.ogc.wfs.catalog.mapper.MetacardMapper;
@@ -177,7 +176,7 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
     try {
       LOGGER.debug("Creating JAXB context with context path: {}.", contextPath);
       jaxbContext =
-          JAXBContext.newInstance(contextPath, CswJAXBElementProvider.class.getClassLoader());
+          JAXBContext.newInstance(contextPath, JAXBElementProvider.class.getClassLoader());
       LOGGER.debug("{}", jaxbContext);
     } catch (JAXBException e) {
       LOGGER.info("Unable to create JAXB context using contextPath: {}.", contextPath, e);
@@ -1248,7 +1247,7 @@ public class WfsFilterDelegate extends SimpleFilterDelegate<FilterType> {
       JAXBElement<MultiPolygonType> multiPoly = null;
       try {
 
-        JTSToGML311GeometryConverter converter = new CswJTSToGML311GeometryConverter();
+        JTSToGML311GeometryConverter converter = new JTSToGML311GeometryConverter();
 
         Marshaller marshaller = new MarshallerImpl(JAXB_CONTEXT.createMarshaller(), converter);
         StringWriter writer = new StringWriter();
